@@ -52,8 +52,8 @@
 
   /* Modal */
   .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px}
-  .modal{max-width:720px;width:100%;background:var(--bg1);border-radius:16px;box-shadow:var(--shadow);border:1px solid rgba(255,255,255,.08);padding:16px}
   .modal-backdrop.open{display:flex}
+  .modal{max-width:720px;width:100%;background:var(--bg1);border-radius:16px;box-shadow:var(--shadow);border:1px solid rgba(255,255,255,.08);padding:16px}
   .modal header{background:transparent;box-shadow:none;padding:0;margin-bottom:10px}
   .modal .grid-cols-7{display:grid;grid-template-columns:repeat(7, minmax(80px,1fr)); gap:10px; overflow-x:auto; padding-bottom:6px}
 
@@ -76,6 +76,51 @@
   body.mobile-show-detail .backbar{display:block}
 
   .hint{font-size:12px;color:var(--muted)}
+
+  /* === Mobile-first tweaks inspired by Material-style lists === */
+  .mobile-only{display:none}
+  .desktop-only{display:inline-flex}
+  @media(max-width:900px){
+    .desktop-only{display:none}
+    .mobile-only{display:inline-flex}
+    header h1{font-size:16px}
+    nav.tabs button{padding:8px 10px;font-size:14px}
+    main{padding:12px}
+    .cards{grid-template-columns:1fr; gap:8px}
+    .card{
+      display:flex; align-items:flex-start; gap:12px;
+      padding:12px; border-left:6px solid var(--accent);
+      border-radius:12px;
+    }
+    .card strong{font-size:16px}
+    .badge{padding:4px 8px; font-size:11px}
+    .btn{padding:8px 10px; font-size:14px; border-radius:12px}
+    .tile{padding:10px; border-radius:12px}
+    .grid{gap:10px; grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+    .modal{padding:12px}
+    .modal .grid-cols-7{gap:8px}
+    label{font-size:11px}
+    input, textarea, select{padding:8px 10px; font-size:14px}
+  }
+  /* List row avatar for Einsatz/Dienst */
+  .avatar{
+    width:36px; height:36px; border-radius:8px;
+    background:var(--bg3); display:flex; align-items:center; justify-content:center;
+    font-size:18px; flex:0 0 36px;
+    border:1px solid rgba(255,255,255,.08)
+  }
+  /* Einsatz row improved structure (title + subline) */
+  .row-einsatz{display:flex; gap:12px; align-items:flex-start}
+  .row-einsatz .content{flex:1; min-width:0}
+  .row-einsatz .title{font-weight:600; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .row-einsatz small{display:block}
+  /* Floating Action Button (mobile) */
+  .fab{
+    position:fixed; right:16px; bottom:16px; z-index:20;
+    width:56px; height:56px; border-radius:999px;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:#fff; color:#000; border:none; box-shadow:var(--shadow); font-size:26px; cursor:pointer;
+  }
 </style>
 </head>
 <body>
@@ -90,8 +135,9 @@
   <main id="app">
     <!-- Dienste -->
     <section id="view-dienste">
+      <button class="fab mobile-only" id="fab-new-dienst">＋</button>
       <div class="section actions">
-        <button class="btn primary" id="btn-new-dienst">＋ Dienst</button>
+        <button class="btn primary desktop-only" id="btn-new-dienst">＋ Dienst</button>
       </div>
       <div class="split">
         <div class="listPane">
@@ -145,7 +191,7 @@
           <button class="btn" id="btn-export-codes">Exportieren (JSON v2)</button>
           <label class="btn"><input type="file" id="file-import-codes" accept="application/json" style="display:none">Importieren (JSON v2)</label>
         </div>
-        <p class="hint">Bundle enthält <code>alarmcodes</code> und <code>pzcMap</code>. Du kannst deine Datei <em>einsatztagebuch-codes-v2.json</em> importieren.</p>
+        <p class="hint">Bundle enthält <code>alarmcodes</code> und <code>pzcMap</code>.</p>
       </div>
     </section>
   </main>
@@ -157,8 +203,8 @@
       <div class="grid">
         <div><label>Beginn</label><input id="dienst-start" type="datetime-local"></div>
         <div><label>Ende</label><input id="dienst-ende" type="datetime-local"></div>
-        <div><label>Dienststelle</label><input id="dienst-stelle" placeholder="z. B. Ort"></div>
-        <div><label>Fahrzeug</label><input id="dienst-fzg" placeholder="z. B. RK-..."></div>
+        <div><label>Dienststelle</label><input id="dienst-stelle" placeholder="z. B. Ort"></div>
+        <div><label>Fahrzeug</label><input id="dienst-fzg" placeholder="z. B. RK-..."></div>
       </div>
       <div class="section">
         <label>Kolleg:innen</label>
@@ -194,7 +240,7 @@
       </div>
       <div class="section">
         <label>Stichwort</label>
-        <input list="dl-codes" id="einsatz-codefull" placeholder="z. B. B1 INTERN">
+        <input list="dl-codes" id="einsatz-codefull" placeholder="z. B. B1 INTERN">
         <datalist id="dl-codes"></datalist>
       </div>
       <div class="section inline">
@@ -238,7 +284,7 @@ function init(){
   const last = localStorage.getItem(K_LASTTAB) || 'dienste';
   bindTabs(last);
   // Buttons
-  byId('btn-new-dienst').onclick = openDienstModalNew;
+  byId('btn-new-dienst').onclick = openDienstModalNew; const fab = byId('fab-new-dienst'); if(fab) fab.onclick = openDienstModalNew;
   byId('btn-back').onclick = () => document.body.classList.remove('mobile-show-detail');
   // Render
   renderAll();
@@ -308,7 +354,7 @@ function computeBLAndTypeFromCodeFull(codeFull){
   if(!codeFull || !state.codes || !Array.isArray(state.codes)) return { code:'', keyword:'', blaulicht:false, type:'' };
   const hit = state.codes.find(c => c.codeFull === codeFull);
   if(hit) return { code: hit.code, keyword: hit.keyword, blaulicht: !!hit.blaulicht, type: hit.type || '' };
-  // MANV/BD heuristics (fallback)
+  // Fallback Heuristik
   let bl = /^(A|B|MANV)/.test(codeFull);
   let type = /^MANV/.test(codeFull) ? 'Großeinsatz' : (/^A/.test(codeFull) ? 'Notarzteinsatz' : (/^B/.test(codeFull) ? 'Rettungseinsatz' : 'Sanitätseinsatz'));
   const code = codeFull.split(' ')[0] || '';
@@ -333,12 +379,15 @@ function renderDienstList(){
   const items = state.dienste.slice().sort((a,b)=> new Date(b.start)-new Date(a.start)).map(d=>{
     const hours = ((new Date(d.ende)-new Date(d.start))/36e5).toFixed(1);
     return `<div class="card" data-id="${d.id}">
-      <div><strong>${fmtDateTimeRange(d.start,d.ende)}</strong></div>
-      <div class="row" style="margin-top:6px">
-        <span class="badge">🏥 ${esc(d.stelle||'–')}</span>
-        <span class="badge">🚐 ${esc(d.fzg||'–')}</span>
-        <span class="badge">#Einsätze: ${d.einsaetze?.length||0}</span>
-        <span class="badge">⏱ ${hours} h</span>
+      <div class="avatar">📅</div>
+      <div class="content">
+        <div><strong>${fmtDateTimeRange(d.start,d.ende)}</strong></div>
+        <div class="row" style="margin-top:6px">
+          <span class="badge">🏥 ${esc(d.stelle||'–')}</span>
+          <span class="badge">🚐 ${esc(d.fzg||'–')}</span>
+          <span class="badge">#Einsätze: ${d.einsaetze?.length||0}</span>
+          <span class="badge">⏱ ${hours} h</span>
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -347,7 +396,6 @@ function renderDienstList(){
   list.querySelectorAll('.card').forEach(el => el.onclick = () => {
     state.selectedDienstId = el.getAttribute('data-id');
     renderDetail();
-    // mobile flow
     if(window.innerWidth <= 900){ document.body.classList.add('mobile-show-detail'); }
   });
 }
@@ -386,8 +434,11 @@ function renderDetail(){
     const diagTxt = e.pzc?.diag && state.pzcMap[e.pzc.diag] ? state.pzcMap[e.pzc.diag] : '';
     const pzcTxt = e.pzc?.diag ? ` • 🩺 ${e.pzc.diag}${diagTxt? ' – '+esc(diagTxt):''}` : '';
     return `<div class="row-einsatz" data-id="${e.id}">
-      <div><strong>${icon} ${esc(e.code||'')} ${esc(e.keyword||'')} </strong></div>
-      <small>⏱ ${dur}${pzcTxt}</small>
+      <div class="avatar">${icon}</div>
+      <div class="content">
+        <div class="title">${esc(e.code||'')} ${esc(e.keyword||'')}</div>
+        <small>⏱ ${dur}${pzcTxt}</small>
+      </div>
     </div>`;
   }).join('');
   if(!einsHTML) einsHTML = '<div class="muted">Noch keine Einsätze.</div>';
@@ -567,7 +618,6 @@ function showEinsatzModal(e, d){
   codeInput.oninput = ()=>{
     const parsed = computeBLAndTypeFromCodeFull(codeInput.value.trim());
     e.code = parsed.code; e.keyword = parsed.keyword;
-    // Reset BL according to rules when code changes
     e.blaulicht = parsed.blaulicht;
     btnBL.textContent = e.blaulicht ? '🚨' : '🧰';
     save(); renderDetail(); refreshDatalist();
@@ -610,7 +660,6 @@ byId('file-import-data').onchange = async (e)=>{
     const txt = await f.text();
     const arr = JSON.parse(txt);
     if(!Array.isArray(arr)) throw new Error('Erwarte ein Array von Diensten.');
-    // quick shape guard
     arr.forEach(d=>{ if(!d.id) d.id = uid8(); d.einsaetze = d.einsaetze||[]; });
     state.dienste = arr; saveJSON(K_DATA, state.dienste); renderAll();
     alert('Daten importiert.');
@@ -630,7 +679,6 @@ byId('file-import-codes').onchange = async (e)=>{
     const txt = await f.text();
     const json = JSON.parse(txt);
     if(!json || !Array.isArray(json.alarmcodes)) throw new Error('JSON v2 erwartet: { alarmcodes: [], pzcMap: {} }');
-    // Migrations-Guard: falls alarmcodes Strings sind
     const codes = mapLegacyStringsToObjects(json.alarmcodes);
     state.codes = codes;
     state.pzcMap = json.pzcMap || {};
@@ -651,7 +699,6 @@ function mapLegacyStringsToObjects(arr){
       return { codeFull: cf, code, keyword, blaulicht, type };
     });
   }
-  // ensure shape + derive fields if missing
   return arr.map(o=>{
     const cf = o.codeFull || '';
     const { code, keyword, blaulicht, type } = computeBLAndTypeFromCodeFull(cf);
