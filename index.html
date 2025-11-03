@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Digitales Einsatztagebuch</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#c0392b" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; worker-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'">
+<style>
+  :root{
+    --accent:#c0392b;
+    --bg1:#2b2b2b; --bg2:#3a3a3a; --bg3:#4a4a4a;
+    --text:#fff; --muted:#ddd; --shadow: 0 8px 24px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.2);
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg1);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{
+    position:sticky;top:0;z-index:10;background:linear-gradient(180deg,#c0392b, #a83225);
+    padding:14px 16px; box-shadow:var(--shadow);
+  }
+  header h1{margin:0;font-size:18px;letter-spacing:.3px}
+  nav.tabs{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  nav.tabs button{background:rgba(255,255,255,.08); color:#fff;border:none;border-radius:999px;padding:10px 14px;cursor:pointer;box-shadow:var(--shadow);}
+  nav.tabs button.active{background:#fff;color:#000}
+  main{padding:16px;max-width:1080px;margin:0 auto}
+  .cards{display:grid;grid-template-columns:repeat( auto-fill, minmax(280px, 1fr) ); gap:14px}
+  .card{background:var(--bg2);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;cursor:pointer;transition:transform .06s ease; border:1px solid rgba(255,255,255,.06)}
+  .card:hover{transform:translateY(-1px)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .badge{background:var(--bg3);border-radius:999px;padding:6px 10px;color:var(--muted);font-size:12px;border:1px solid rgba(255,255,255,.08)}
+  .muted{color:var(--muted)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px 12px;color:#fff;cursor:pointer;box-shadow:var(--shadow)}
+  .btn.primary{background:var(--accent)}
+  .btn.warn{background:#7c1e15}
+  .btn:active{transform:translateY(1px)}
+  .section{margin:18px 0 8px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px}
+  .tile{background:var(--bg2);border-radius:var(--radius);padding:12px;border:1px solid rgba(255,255,255,.06)}
+  .chip{display:inline-flex;gap:6px;align-items:center;background:var(--bg3);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:6px 10px;margin:4px 4px 0 0}
+  .chip button{background:none;border:none;color:#fff;cursor:pointer}
+
+  /* Detail layout + mobile flow */
+  .split{display:grid;grid-template-columns:320px 1fr;gap:16px}
+  @media(max-width:900px){
+    body.mobile-show-detail .listPane{display:none}
+    body.mobile-show-detail .detailPane{grid-column:1/-1}
+    .split{grid-template-columns:1fr}
+  }
+
+  /* Modal */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px}
+  .modal{max-width:720px;width:100%;background:var(--bg1);border-radius:16px;box-shadow:var(--shadow);border:1px solid rgba(255,255,255,.08);padding:16px}
+  .modal-backdrop.open{display:flex}
+  .modal header{background:transparent;box-shadow:none;padding:0;margin-bottom:10px}
+  .modal .grid-cols-7{display:grid;grid-template-columns:repeat(7, minmax(80px,1fr)); gap:10px; overflow-x:auto; padding-bottom:6px}
+
+  /* Inputs */
+  label{display:block;font-size:12px;color:var(--muted);margin:8px 2px}
+  input, textarea, select, datalist{width:100%;background:var(--bg3);color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px;outline:none}
+  input.time{font-variant-numeric: tabular-nums}
+  input.valid{border-color:#8bc34a}
+  input.invalid{border-color:#e74c3c}
+  .inline{display:flex;gap:8px}
+  .inline > *{flex:1}
+  .right{margin-left:auto}
+
+  /* List rows for Einsätze */
+  .row-einsatz{padding:10px 12px;border-radius:12px;background:var(--bg2);border:1px solid rgba(255,255,255,.06);margin-top:8px}
+  .row-einsatz small{color:var(--muted)}
+
+  /* Back button for mobile detail */
+  .backbar{display:none;margin-bottom:8px}
+  body.mobile-show-detail .backbar{display:block}
+
+  .hint{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+  <header>
+    <h1>🚑 Digitales Einsatztagebuch</h1>
+    <nav class="tabs">
+      <button id="tab-dienste" class="active">Dienste</button>
+      <button id="tab-stats">Statistik</button>
+      <button id="tab-io">Import/Export</button>
+    </nav>
+  </header>
+  <main id="app">
+    <!-- Dienste -->
+    <section id="view-dienste">
+      <div class="section actions">
+        <button class="btn primary" id="btn-new-dienst">＋ Dienst</button>
+      </div>
+      <div class="split">
+        <div class="listPane">
+          <div id="dienst-list" class="cards"></div>
+        </div>
+        <div class="detailPane">
+          <div class="backbar">
+            <button class="btn" id="btn-back">‹ Zurück zur Liste</button>
+          </div>
+          <div id="dienst-detail"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Statistik -->
+    <section id="view-stats" style="display:none">
+      <div class="section grid">
+        <div class="tile"><div class="muted">Dienste</div><h2 id="st-count-dienste">0</h2></div>
+        <div class="tile"><div class="muted">Einsätze</div><h2 id="st-count-einsaetze">0</h2></div>
+        <div class="tile"><div class="muted">Blaulicht</div><h2 id="st-pct-blaulicht">0%</h2></div>
+        <div class="tile"><div class="muted">Gesamtstunden</div><h2 id="st-hrs">0</h2></div>
+        <div class="tile"><div class="muted">Ø Einsätze/Dienst</div><h2 id="st-avg">0</h2></div>
+      </div>
+      <div class="section">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h3>Einsätze</h3>
+          <div class="inline" style="max-width:360px">
+            <select id="sort-codes">
+              <option value="freq">Sortierung: Häufigkeit</option>
+              <option value="az">Sortierung: A→Z</option>
+            </select>
+          </div>
+        </div>
+        <div id="codes-list"></div>
+      </div>
+    </section>
+
+    <!-- Import/Export -->
+    <section id="view-io" style="display:none">
+      <div class="section">
+        <h3>Gesamtdaten</h3>
+        <div class="row actions">
+          <button class="btn" id="btn-export-data">Exportieren (JSON)</button>
+          <label class="btn"><input type="file" id="file-import-data" accept="application/json" style="display:none">Importieren (JSON)</label>
+        </div>
+        <p class="hint">Export/Import der Dienste & Einsätze (Key <code>etb-data-v2</code>).</p>
+      </div>
+      <div class="section">
+        <h3>Codes (Alarmcodes + PZC)</h3>
+        <div class="row actions">
+          <button class="btn" id="btn-export-codes">Exportieren (JSON v2)</button>
+          <label class="btn"><input type="file" id="file-import-codes" accept="application/json" style="display:none">Importieren (JSON v2)</label>
+        </div>
+        <p class="hint">Bundle enthält <code>alarmcodes</code> und <code>pzcMap</code>. Du kannst deine Datei <em>einsatztagebuch-codes-v2.json</em> importieren.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal: Dienst -->
+  <div class="modal-backdrop" id="modal-dienst">
+    <div class="modal">
+      <header><h3>Dienst</h3></header>
+      <div class="grid">
+        <div><label>Beginn</label><input id="dienst-start" type="datetime-local"></div>
+        <div><label>Ende</label><input id="dienst-ende" type="datetime-local"></div>
+        <div><label>Dienststelle</label><input id="dienst-stelle" placeholder="z. B. Ort"></div>
+        <div><label>Fahrzeug</label><input id="dienst-fzg" placeholder="z. B. RK-..."></div>
+      </div>
+      <div class="section">
+        <label>Kolleg:innen</label>
+        <div class="inline"><input id="kollege-input" placeholder="Name"><button class="btn" id="btn-add-kollege">＋</button></div>
+        <div id="kollegen-chips" class="row"></div>
+      </div>
+      <div class="section">
+        <label>Notiz</label>
+        <textarea id="dienst-note" rows="3" placeholder="Optional"></textarea>
+      </div>
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="btn" id="btn-dienst-cancel">Abbrechen</button>
+        <button class="btn primary" id="btn-dienst-save">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Einsatz hinzufügen / bearbeiten -->
+  <div class="modal-backdrop" id="modal-einsatz">
+    <div class="modal">
+      <header><h3 id="einsatz-modal-title">Einsatz</h3></header>
+      <div class="grid-cols-7" id="einsatz-times-grid">
+        <div>
+          <label>Blaulicht</label>
+          <button class="btn" id="einsatz-bl" title="Toggle">🧰</button>
+        </div>
+        <div><label>Auftrag</label><input class="time" id="t-alarm" placeholder="HH:MM"></div>
+        <div><label>Anfahrt</label><input class="time" id="t-anfahrt" placeholder="HH:MM"></div>
+        <div><label>Am Ort</label><input class="time" id="t-ort" placeholder="HH:MM"></div>
+        <div><label>Transport</label><input class="time" id="t-trans" placeholder="HH:MM"></div>
+        <div><label>Ziel</label><input class="time" id="t-ziel" placeholder="HH:MM"></div>
+        <div><label>Ende</label><input class="time" id="t-ende" placeholder="HH:MM"></div>
+      </div>
+      <div class="section">
+        <label>Stichwort</label>
+        <input list="dl-codes" id="einsatz-codefull" placeholder="z. B. B1 INTERN">
+        <datalist id="dl-codes"></datalist>
+      </div>
+      <div class="section inline">
+        <div><label>PZC Diag (3)</label><input id="pzc-diag" maxlength="3" inputmode="numeric" placeholder="123"></div>
+        <div><label>Alter (2)</label><input id="pzc-age" maxlength="2" inputmode="numeric" placeholder="45"></div>
+        <div><label>Prio (1)</label><input id="pzc-prio" maxlength="1" inputmode="numeric" placeholder="3"></div>
+      </div>
+      <div class="section">
+        <label>Notiz</label>
+        <textarea id="einsatz-note" rows="3" placeholder="Optional"></textarea>
+      </div>
+      <div class="row" style="justify-content:flex-end;gap:8px">
+        <button class="btn warn left" id="btn-einsatz-delete">🗑️ Löschen</button>
+        <span class="right"></span>
+        <button class="btn" id="btn-einsatz-close">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ======= Storage Keys ======= */
+const K_DATA = 'etb-data-v2';
+const K_CODES = 'etb-alarmcodes-v2';
+const K_PZC  = 'etb-pzc-map-v1';
+const K_LASTTAB = 'etb-last-tab';
+
+/* ======= State ======= */
+let state = {
+  dienste: loadJSON(K_DATA, []),
+  codes:   loadJSON(K_CODES, []),
+  pzcMap:  loadJSON(K_PZC, {}),
+  selectedDienstId: null,
+  editingDienstId: null,
+  editingEinsatz: null
+};
+
+/* ======= Boot ======= */
+init();
+function init(){
+  // Tabs
+  const last = localStorage.getItem(K_LASTTAB) || 'dienste';
+  bindTabs(last);
+  // Buttons
+  byId('btn-new-dienst').onclick = openDienstModalNew;
+  byId('btn-back').onclick = () => document.body.classList.remove('mobile-show-detail');
+  // Render
+  renderAll();
+  // Fill datalist
+  refreshDatalist();
+  // Register SW
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+  }
+}
+
+/* ======= Utils ======= */
+function byId(id){ return document.getElementById(id); }
+function saveJSON(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+function loadJSON(key, fallback){ try{ return JSON.parse(localStorage.getItem(key)) ?? fallback }catch{ return fallback } }
+function uid8(){ return Math.random().toString(36).slice(2,10); }
+function fmtDateTimeRange(isoA, isoB){
+  if(!isoA || !isoB) return '—';
+  const a = new Date(isoA), b = new Date(isoB);
+  const f = (d) => d.toLocaleString(undefined,{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+  return `${f(a)} – ${b.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+}
+function minutesBetween(hmA, hmB){
+  if(!hmA || !hmB) return null;
+  const [h1,m1] = hmA.split(':').map(x=>+x);
+  const [h2,m2] = hmB.split(':').map(x=>+x);
+  let t1 = h1*60+m1, t2 = h2*60+m2;
+  if(t2 < t1) t2 += 1440; // over midnight
+  return t2 - t1;
+}
+function fmtMin(min){ if(min==null) return '—'; const h=Math.floor(min/60), m=min%60; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`; }
+
+// time mask live
+function timeMaskLive(input){
+  input.addEventListener('input', (e)=>{
+    let v = input.value.replace(/[^0-9]/g,'');
+    if(v.length>4) v = v.slice(0,4);
+    if(v.length>=3) v = v.slice(0,2)+':'+v.slice(2);
+    input.value = v;
+    markTimeValidity(input);
+  });
+  input.addEventListener('blur', ()=>{
+    finalizeTime(input);
+  });
+}
+function finalizeTime(input){
+  let v = input.value.trim();
+  if(v === '') { input.classList.remove('valid','invalid'); return; }
+  if(/^[0-9]:[0-9]$/.test(v)){ const [h,m]=v.split(':'); v=`0${h}:0${m}`; }
+  if(/^[0-9]:[0-9]{2}$/.test(v)){ const [h,m]=v.split(':'); v=`0${h}:${m}`; }
+  if(/^[0-9]{2}:[0-9]$/.test(v)){ const [h,m]=v.split(':'); v=`${h}:0${m}`; }
+  input.value = v;
+  markTimeValidity(input);
+}
+function markTimeValidity(input){
+  const ok = isValidTime(input.value);
+  input.classList.toggle('valid', ok);
+  input.classList.toggle('invalid', !ok && input.value.trim() !== '');
+}
+function isValidTime(v){
+  const m = /^([01]?[0-9]|2[0-3]):([0-5][0-9])$/.exec(v);
+  return !!m;
+}
+
+/* ======= Domain: Regeln ======= */
+function computeBLAndTypeFromCodeFull(codeFull){
+  if(!codeFull || !state.codes || !Array.isArray(state.codes)) return { code:'', keyword:'', blaulicht:false, type:'' };
+  const hit = state.codes.find(c => c.codeFull === codeFull);
+  if(hit) return { code: hit.code, keyword: hit.keyword, blaulicht: !!hit.blaulicht, type: hit.type || '' };
+  // MANV/BD heuristics (fallback)
+  let bl = /^(A|B|MANV)/.test(codeFull);
+  let type = /^MANV/.test(codeFull) ? 'Großeinsatz' : (/^A/.test(codeFull) ? 'Notarzteinsatz' : (/^B/.test(codeFull) ? 'Rettungseinsatz' : 'Sanitätseinsatz'));
+  const code = codeFull.split(' ')[0] || '';
+  const keyword = codeFull.replace(code,'').trim();
+  return { code, keyword, blaulicht: bl, type };
+}
+
+/* ======= Rendering ======= */
+function renderAll(){
+  renderDienstList();
+  renderDetail();
+  renderStats();
+  refreshDatalist();
+}
+
+function renderDienstList(){
+  const list = byId('dienst-list');
+  if(state.dienste.length === 0){
+    list.innerHTML = '<div class="muted">Noch keine Dienste. Lege einen an.</div>';
+    return;
+  }
+  const items = state.dienste.slice().sort((a,b)=> new Date(b.start)-new Date(a.start)).map(d=>{
+    const hours = ((new Date(d.ende)-new Date(d.start))/36e5).toFixed(1);
+    return `<div class="card" data-id="${d.id}">
+      <div><strong>${fmtDateTimeRange(d.start,d.ende)}</strong></div>
+      <div class="row" style="margin-top:6px">
+        <span class="badge">🏥 ${esc(d.stelle||'–')}</span>
+        <span class="badge">🚐 ${esc(d.fzg||'–')}</span>
+        <span class="badge">#Einsätze: ${d.einsaetze?.length||0}</span>
+        <span class="badge">⏱ ${hours} h</span>
+      </div>
+    </div>`;
+  }).join('');
+  list.innerHTML = items;
+  // clicks
+  list.querySelectorAll('.card').forEach(el => el.onclick = () => {
+    state.selectedDienstId = el.getAttribute('data-id');
+    renderDetail();
+    // mobile flow
+    if(window.innerWidth <= 900){ document.body.classList.add('mobile-show-detail'); }
+  });
+}
+
+function renderDetail(){
+  const host = byId('dienst-detail');
+  const d = state.dienste.find(x=>x.id===state.selectedDienstId);
+  if(!d){ host.innerHTML = '<div class="muted">Wähle links einen Dienst aus.</div>'; return; }
+
+  const kol = (d.kollegen||[]).map(n=>`<span class="chip">${esc(n)}</span>`).join('') || '–';
+  let tiles = `
+    <div class="grid">
+      <div class="tile"><div class="muted">Gesamtstunden</div><strong>${((new Date(d.ende)-new Date(d.start))/36e5).toFixed(1)}</strong></div>
+      <div class="tile"><div class="muted">#Einsätze</div><strong>${d.einsaetze?.length||0}</strong></div>
+      <div class="tile"><div class="muted">Dienststelle</div><strong>${esc(d.stelle||'–')}</strong></div>
+      <div class="tile"><div class="muted">Fahrzeug</div><strong>${esc(d.fzg||'–')}</strong></div>
+      <div class="tile"><div class="muted">Datum</div><strong>${fmtDateTimeRange(d.start,d.ende)}</strong></div>
+      <div class="tile"><div class="muted">Kolleg:innen</div><div>${kol}</div></div>
+      <div class="tile"><div class="muted">Aktionen</div>
+        <div class="row actions">
+          <button class="btn" id="act-edit">⚙️ bearbeiten</button>
+          <button class="btn warn" id="act-del">🗑️ löschen</button>
+        </div>
+      </div>
+    </div>`;
+
+  let einsHTML = (d.einsaetze||[]).map(e=>{
+    const icon = e.blaulicht ? '🚨' : '🧰';
+    const times = [e.times?.alarm, e.times?.anfahrt, e.times?.einsatzort, e.times?.transport_start, e.times?.transport_ziel, e.times?.ende].filter(Boolean);
+    let dur = '—';
+    if(times.length>=2){
+      const first = times[0]; const last = times[times.length-1];
+      const min = minutesBetween(first,last);
+      if(min!=null) dur = fmtMin(min);
+    }
+    const diagTxt = e.pzc?.diag && state.pzcMap[e.pzc.diag] ? state.pzcMap[e.pzc.diag] : '';
+    const pzcTxt = e.pzc?.diag ? ` • 🩺 ${e.pzc.diag}${diagTxt? ' – '+esc(diagTxt):''}` : '';
+    return `<div class="row-einsatz" data-id="${e.id}">
+      <div><strong>${icon} ${esc(e.code||'')} ${esc(e.keyword||'')} </strong></div>
+      <small>⏱ ${dur}${pzcTxt}</small>
+    </div>`;
+  }).join('');
+  if(!einsHTML) einsHTML = '<div class="muted">Noch keine Einsätze.</div>';
+
+  host.innerHTML = `
+    ${tiles}
+    <div class="section actions">
+      <button class="btn primary" id="btn-add-einsatz">＋ Einsatz hinzufügen</button>
+    </div>
+    <div id="einsatz-list">${einsHTML}</div>
+    ${d.note ? `<div class="section"><div class="tile"><div class="muted">Notiz</div>${esc(d.note)}</div></div>`:''}
+  `;
+
+  byId('act-edit').onclick = ()=> openDienstModalEdit(d.id);
+  byId('act-del').onclick = ()=> {
+    if(confirm('Diesen Dienst wirklich löschen?')){
+      state.dienste = state.dienste.filter(x=>x.id!==d.id);
+      saveJSON(K_DATA, state.dienste);
+      state.selectedDienstId = null;
+      renderAll();
+    }
+  };
+  byId('btn-add-einsatz').onclick = ()=> openEinsatzModalNew(d.id);
+  host.querySelectorAll('#einsatz-list .row-einsatz').forEach(el => el.onclick = ()=>{
+    const eid = el.getAttribute('data-id');
+    openEinsatzModalEdit(d.id, eid);
+  });
+}
+
+function renderStats(){
+  const ds = state.dienste;
+  const eins = ds.flatMap(d => d.einsaetze || []);
+  const blCount = eins.filter(e=>e.blaulicht).length;
+  const totalHrs = ds.reduce((acc,d)=> acc + ( (new Date(d.ende)-new Date(d.start))/36e5 ), 0);
+  byId('st-count-dienste').textContent = ds.length;
+  byId('st-count-einsaetze').textContent = eins.length;
+  byId('st-pct-blaulicht').textContent = eins.length? Math.round(blCount/eins.length*100)+'%':'0%';
+  byId('st-hrs').textContent = totalHrs.toFixed(1);
+  byId('st-avg').textContent = ds.length? (eins.length/ds.length).toFixed(2):'0';
+
+  // Codes list
+  const freq = {};
+  eins.forEach(e => {
+    const cf = `${e.code||''} ${e.keyword||''}`.trim();
+    if(!cf) return;
+    freq[cf] = (freq[cf]||0)+1;
+  });
+  let entries = Object.entries(freq);
+  const mode = byId('sort-codes').value;
+  entries.sort((a,b)=> mode==='az' ? a[0].localeCompare(b[0]) : b[1]-a[1]);
+  byId('codes-list').innerHTML = entries.map(([codeFull, n])=>`<div class="row-einsatz" data-code="${esc(codeFull)}"><strong>${esc(codeFull)}</strong> – ${n}</div>`).join('') || '<div class="muted">Noch keine Einsätze.</div>';
+}
+byId('sort-codes').onchange = renderStats;
+
+/* ======= Tabs ======= */
+function bindTabs(initial){
+  const tabs = { dienste:'view-dienste', stats:'view-stats', io:'view-io' };
+  const btns = { dienste: byId('tab-dienste'), stats: byId('tab-stats'), io: byId('tab-io') };
+  const show = (key)=>{
+    for(const k in tabs){
+      byId(tabs[k]).style.display = (k===key)?'block':'none';
+      btns[k].classList.toggle('active', k===key);
+    }
+    localStorage.setItem(K_LASTTAB, key);
+  };
+  btns.dienste.onclick = ()=> show('dienste');
+  btns.stats.onclick = ()=> show('stats');
+  btns.io.onclick = ()=> show('io');
+  // restore
+  show(initial);
+}
+
+/* ======= Dienst Modal ======= */
+function openDienstModalNew(){
+  state.editingDienstId = null;
+  openDienstModal({
+    id: uid8(),
+    start: new Date().toISOString().slice(0,16),
+    ende: new Date(Date.now()+12*36e5).toISOString().slice(0,16),
+    stelle:'', fzg:'', kollegen:[], note:'', einsaetze: []
+  });
+}
+function openDienstModalEdit(id){
+  const d = state.dienste.find(x=>x.id===id);
+  if(!d) return;
+  state.editingDienstId = id;
+  openDienstModal(d);
+}
+function openDienstModal(d){
+  const modal = byId('modal-dienst'); modal.classList.add('open');
+  byId('dienst-start').value = (d.start||'').slice(0,16);
+  byId('dienst-ende').value = (d.ende||'').slice(0,16);
+  byId('dienst-stelle').value = d.stelle||'';
+  byId('dienst-fzg').value = d.fzg||'';
+  byId('dienst-note').value = d.note||'';
+  // chips
+  const chips = byId('kollegen-chips');
+  chips.innerHTML = '';
+  (d.kollegen||[]).forEach(name=> addChip(name));
+  function addChip(name){
+    const el = document.createElement('span');
+    el.className='chip'; el.textContent = name+' ';
+    const x = document.createElement('button'); x.textContent='×';
+    x.onclick = ()=>{ el.remove(); };
+    el.appendChild(x); chips.appendChild(el);
+  }
+  byId('btn-add-kollege').onclick = ()=>{
+    const v = byId('kollege-input').value.trim(); if(!v) return;
+    addChip(v); byId('kollege-input').value='';
+  };
+  byId('btn-dienst-cancel').onclick = ()=> modal.classList.remove('open');
+  byId('btn-dienst-save').onclick = ()=>{
+    const kol = Array.from(chips.querySelectorAll('.chip')).map(el=>el.firstChild.textContent.trim());
+    const nd = {
+      id: d.id,
+      start: byId('dienst-start').value,
+      ende: byId('dienst-ende').value,
+      stelle: byId('dienst-stelle').value.trim(),
+      fzg: byId('dienst-fzg').value.trim(),
+      kollegen: kol,
+      note: byId('dienst-note').value,
+      einsaetze: d.einsaetze || []
+    };
+    if(state.editingDienstId){
+      const idx = state.dienste.findIndex(x=>x.id===state.editingDienstId);
+      state.dienste[idx] = nd;
+    }else{
+      state.dienste.push(nd);
+    }
+    saveJSON(K_DATA, state.dienste);
+    state.selectedDienstId = nd.id;
+    modal.classList.remove('open');
+    renderAll();
+  };
+  modal.onclick = (e)=>{ if(e.target===modal) modal.classList.remove('open'); };
+}
+
+/* ======= Einsatz Modal ======= */
+function openEinsatzModalNew(dienstId){
+  const d = state.dienste.find(x=>x.id===dienstId); if(!d) return;
+  const e = {
+    id: uid8(),
+    code: '', keyword:'', blaulicht: false, note:'', times:{}, pzc:{diag:'', age:'', prio:''}
+  };
+  state.editingEinsatz = { dienstId, eid: e.id };
+  d.einsaetze.push(e); saveJSON(K_DATA, state.dienste);
+  showEinsatzModal(e, d);
+}
+function openEinsatzModalEdit(dienstId, eid){
+  const d = state.dienste.find(x=>x.id===dienstId); if(!d) return;
+  const e = d.einsaetze.find(x=>x.id===eid); if(!e) return;
+  state.editingEinsatz = { dienstId, eid };
+  showEinsatzModal(e, d);
+}
+function showEinsatzModal(e, d){
+  byId('einsatz-modal-title').textContent = `Einsatz – ${e.code? (e.code+' '+e.keyword):'neu'}`;
+  const modal = byId('modal-einsatz'); modal.classList.add('open');
+  const btnBL = byId('einsatz-bl'); btnBL.textContent = e.blaulicht ? '🚨' : '🧰';
+  btnBL.onclick = ()=>{ e.blaulicht = !e.blaulicht; btnBL.textContent = e.blaulicht ? '🚨' : '🧰'; save(); renderDetail(); };
+
+  // time inputs
+  const map = {
+    't-alarm':'alarm', 't-anfahrt':'anfahrt','t-ort':'einsatzort','t-trans':'transport_start','t-ziel':'transport_ziel','t-ende':'ende'
+  };
+  for(const id in map){
+    const key = map[id];
+    const input = byId(id);
+    input.value = e.times?.[key] || '';
+    timeMaskLive(input);
+    input.oninput = ()=>{ e.times[key]=input.value; save(); };
+    input.onblur = ()=>{ finalizeTime(input); if(isValidTime(input.value)){ e.times[key]=input.value; save(); renderDetail(); } };
+  }
+
+  // codeFull
+  const codeInput = byId('einsatz-codefull');
+  codeInput.value = `${e.code||''} ${e.keyword||''}`.trim();
+  codeInput.oninput = ()=>{
+    const parsed = computeBLAndTypeFromCodeFull(codeInput.value.trim());
+    e.code = parsed.code; e.keyword = parsed.keyword;
+    // Reset BL according to rules when code changes
+    e.blaulicht = parsed.blaulicht;
+    btnBL.textContent = e.blaulicht ? '🚨' : '🧰';
+    save(); renderDetail(); refreshDatalist();
+    byId('einsatz-modal-title').textContent = `Einsatz – ${codeInput.value||'neu'}`;
+  };
+
+  // PZC
+  const pzcd = byId('pzc-diag'), pzca = byId('pzc-age'), pzcp = byId('pzc-prio');
+  pzcd.value = e.pzc?.diag || ''; pzca.value = e.pzc?.age || ''; pzcp.value = e.pzc?.prio || '';
+  pzcd.oninput = ()=>{ e.pzc.diag = pzcd.value.replace(/\D/g,'').slice(0,3); pzcd.value=e.pzc.diag; save(); renderDetail(); };
+  pzca.oninput = ()=>{ e.pzc.age  = pzca.value.replace(/\D/g,'').slice(0,2);  pzca.value=e.pzc.age;  save(); };
+  pzcp.oninput = ()=>{ e.pzc.prio = pzcp.value.replace(/\D/g,'').slice(0,1); pzcp.value=e.pzc.prio; save(); };
+
+  // Note
+  const note = byId('einsatz-note'); note.value = e.note || '';
+  note.oninput = ()=>{ e.note = note.value; save(); };
+
+  // delete / close
+  byId('btn-einsatz-delete').onclick = ()=>{
+    if(confirm('Diesen Einsatz löschen?')){
+      d.einsaetze = d.einsaetze.filter(x=>x.id!==e.id);
+      saveJSON(K_DATA, state.dienste); renderDetail(); modal.classList.remove('open');
+    }
+  };
+  byId('btn-einsatz-close').onclick = ()=> modal.classList.remove('open');
+  modal.onclick = (ev)=>{ if(ev.target===modal) modal.classList.remove('open'); };
+
+  function save(){ saveJSON(K_DATA, state.dienste); }
+}
+
+/* ======= Import/Export ======= */
+byId('btn-export-data').onclick = ()=>{
+  const blob = new Blob([JSON.stringify(state.dienste,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'etb-data-v2.json'; a.click();
+};
+byId('file-import-data').onchange = async (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const txt = await f.text();
+    const arr = JSON.parse(txt);
+    if(!Array.isArray(arr)) throw new Error('Erwarte ein Array von Diensten.');
+    // quick shape guard
+    arr.forEach(d=>{ if(!d.id) d.id = uid8(); d.einsaetze = d.einsaetze||[]; });
+    state.dienste = arr; saveJSON(K_DATA, state.dienste); renderAll();
+    alert('Daten importiert.');
+  }catch(err){ alert('Import fehlgeschlagen: '+err.message); }
+  e.target.value='';
+};
+
+byId('btn-export-codes').onclick = ()=>{
+  const bundle = { alarmcodes: state.codes, pzcMap: state.pzcMap };
+  const blob = new Blob([JSON.stringify(bundle,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'einsatztagebuch-codes-v2.json'; a.click();
+};
+byId('file-import-codes').onchange = async (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const txt = await f.text();
+    const json = JSON.parse(txt);
+    if(!json || !Array.isArray(json.alarmcodes)) throw new Error('JSON v2 erwartet: { alarmcodes: [], pzcMap: {} }');
+    // Migrations-Guard: falls alarmcodes Strings sind
+    const codes = mapLegacyStringsToObjects(json.alarmcodes);
+    state.codes = codes;
+    state.pzcMap = json.pzcMap || {};
+    saveJSON(K_CODES, state.codes);
+    saveJSON(K_PZC, state.pzcMap);
+    refreshDatalist();
+    alert('Codes importiert.');
+  }catch(err){ alert('Import fehlgeschlagen: '+err.message); }
+  e.target.value='';
+};
+
+function mapLegacyStringsToObjects(arr){
+  if(!Array.isArray(arr)) return [];
+  if(arr.length && typeof arr[0] === 'string'){
+    return arr.map(s=>{
+      const cf = s.trim();
+      const { code, keyword, blaulicht, type } = computeBLAndTypeFromCodeFull(cf);
+      return { codeFull: cf, code, keyword, blaulicht, type };
+    });
+  }
+  // ensure shape + derive fields if missing
+  return arr.map(o=>{
+    const cf = o.codeFull || '';
+    const { code, keyword, blaulicht, type } = computeBLAndTypeFromCodeFull(cf);
+    return { codeFull: cf, code: o.code||code, keyword: o.keyword||keyword, blaulicht: ('blaulicht' in o)? !!o.blaulicht : blaulicht, type: o.type||type };
+  });
+}
+
+function refreshDatalist(){
+  const dl = byId('dl-codes');
+  dl.innerHTML = (state.codes||[]).slice(0,80).map(c=>`<option value="${esc(c.codeFull)}"></option>`).join('');
+}
+
+/* ======= Helpers ======= */
+function esc(s){ return (s??'').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+</script>
+</body>
+</html>
